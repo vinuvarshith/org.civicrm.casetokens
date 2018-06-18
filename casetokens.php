@@ -152,21 +152,28 @@ function casetokens_civicrm_tokens(&$tokens) {
   if ($caseId) {
     $case = civicrm_api3('Case', 'getsingle', array(
       'id' => $caseId,
-      'return' => 'case_type_id.definition',
+      'return' => array('case_type_id.definition', 'contacts'),
     ));
     $tokens['case_roles'] = array(
       'case_roles.client' => ts('Case Client(s)'),
     );
+    // handle multiple contact with same roles
+    $contactRoles = array();
+    foreach ($case['contacts'] as $each) {
+      $contactRoles[$each['role']][$each['contact_id']] = $each['contact_id'];
+    }
     foreach ($case['case_type_id.definition']['caseRoles'] as $relation) {
       $relationship = civicrm_api3('RelationshipType', 'getsingle', array('name_b_a' => $relation['name']));
       $role = strtolower(CRM_Utils_String::munge($relation['name']));
-      $tokens['case_roles'] += array(
-        "case_roles.{$role}_display_name" => $relationship['label_b_a'] . ' - ' . ts('Display Name'),
-        "case_roles.{$role}_address" => $relationship['label_b_a'] . ' - ' . ts('Address'),
-        "case_roles.{$role}_phone" => $relationship['label_b_a'] . ' - ' . ts('Phone'),
-        "case_roles.{$role}_email" => $relationship['label_b_a'] . ' - ' . ts('Email'),
-        "case_roles.{$role}_website" => $relationship['label_b_a'] . ' - ' . ts('Website'),
-      );
+      foreach ($contactRoles[$relation['name']] as $contactId) {
+        $tokens['case_roles'] += array(
+          "case_roles.{$role}_{$contactId}_display_name" => $relationship['label_b_a'] . ' (id: ' . $contactId . ') - ' . ts('Display Name'),
+          "case_roles.{$role}_{$contactId}_address" => $relationship['label_b_a'] . ' (id: ' . $contactId . ') - ' . ts('Address'),
+          "case_roles.{$role}_{$contactId}_phone" => $relationship['label_b_a'] . ' (id: ' . $contactId . ') - ' . ts('Phone'),
+          "case_roles.{$role}_{$contactId}_email" => $relationship['label_b_a'] . ' (id: ' . $contactId . ') - ' . ts('Email'),
+          "case_roles.{$role}_{$contactId}_website" => $relationship['label_b_a'] . ' (id: ' . $contactId . ') - ' . ts('Website'),
+        );
+      }
     }
   }
 }
@@ -197,19 +204,21 @@ function casetokens_civicrm_tokenvalues(&$values, $cids, $job = NULL, $tokens = 
     $contacts = array();
     foreach ($relations['values'] as $rel) {
       $role = strtolower(CRM_Utils_String::munge($rel['relationship_type_id.name_b_a']));
-      if (empty($contacts[$role])) {
-        $contacts[$role] = civicrm_api3('Contact', 'getsingle', array('id' => $rel['contact_id_b']));
+      if (empty($contacts[$role][$rel['contact_id_b']])) {
+        $contacts[$role][$rel['contact_id_b']] = civicrm_api3('Contact', 'getsingle', array('id' => $rel['contact_id_b']));
       }
     }
 
     // Fill tokens
     foreach ($values as &$set) {
       $set['case_roles.client'] = $clients;
-      foreach ($contacts as $role => $contact) {
-        $set["case_roles.{$role}_display_name"] = $contact['display_name'];
-        $set["case_roles.{$role}_email"] = CRM_Utils_Array::value('email', $contact);
-        $set["case_roles.{$role}_phone"] = CRM_Utils_Array::value('phone', $contact);
-        $set["case_roles.{$role}_address"] = CRM_Utils_Address::format($contact);
+      foreach ($contacts as $role => $roleContact) {
+        foreach ($roleContact as $contact) {
+          $set["case_roles.{$role}_{$contact['id']}_display_name"] = $contact['display_name'];
+          $set["case_roles.{$role}_{$contact['id']}_email"] = CRM_Utils_Array::value('email', $contact);
+          $set["case_roles.{$role}_{$contact['id']}_phone"] = CRM_Utils_Array::value('phone', $contact);
+          $set["case_roles.{$role}_{$contact['id']}_address"] = CRM_Utils_Address::format($contact);
+        }
       }
     }
   }
