@@ -132,8 +132,12 @@ function casetokens_civicrm_alterSettingsFolders(&$metaDataFolders = NULL) {
  */
 function _casetokens_get_case_id() {
   // Hack to get case id from the url
-  if (!empty($_GET['caseid'])) {
-    \Civi::$statics['casetokens']['case_id'] = $_GET['caseid'];
+  $variations = array('caseid', 'caseId');
+  foreach ($variations as $variation) {
+    if (!empty($_GET[$variation])) {
+      \Civi::$statics['casetokens']['case_id'] = $_GET[$variation];
+      break;
+    }
   }
   // Extra hack to get it from the entry url after a form is posted
   if (empty(\Civi::$statics['casetokens']['case_id']) && !empty($_POST['entryURL'])) {
